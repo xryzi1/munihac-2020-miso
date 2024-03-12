@@ -18,13 +18,32 @@ main :: IO ()
 main = startApp App { .. }
   where
     initialAction = None
-    model         = Model { grid = aGrid }
+    model         = initModel
     update        = updateModel
     view          = viewModel
     events        = defaultEvents
     subs          = []
     mountPoint    = Nothing
     logLevel      = Off
+
+data Player = Player { 
+    square :: Square
+  , name   :: String  
+  }
+  deriving (Show, Eq)
+
+john, jacob :: Player
+john = Player { square = O, name = "John"}
+jacob = Player { square = X, name = "Jacob" }
+
+initModel :: Model
+initModel = Model {
+      grid = aGrid
+    , player1 = john
+    , player2 = jacob
+    , isPlayer1Playing = True
+    , winner = Nothing
+    }
 
 data Square
   = X | O
@@ -54,25 +73,41 @@ hasWinner g
       = Nothing
 
 data Model
-  = Model { grid :: Grid }
+  = Model { 
+    grid :: Grid
+  , player1 :: Player
+  , player2 :: Player
+  , isPlayer1Playing :: Bool
+  , winner :: Maybe Square
+  }
   deriving (Show, Eq)
 
 data Action
   = None
   | ClickSquare Int Int
+  | NewGame
   deriving (Show, Eq)
 
 updateModel :: Action -> Model -> Effect Action Model
 updateModel None m
   = noEff m
--- TODO: care about player
-updateModel (ClickSquare rowId colId) m@(Model grid)
+updateModel (ClickSquare rowId colId) m@(Model grid player1 player2 isPlayer1Playing winner)
   = case grid !! rowId !! colId of
         (Just _) -> noEff m -- Occupied
-        Nothing -> pure $ Model (beforeRow ++ [beforeCol ++ Just X : afterCol] ++ afterRow)
+        Nothing -> pure $ 
+          Model newGrid player1 player2 (not isPlayer1Playing) (hasWinner newGrid)
           where
             (beforeRow, row:afterRow) = splitAt rowId grid
             (beforeCol, _:afterCol) = splitAt colId row
+            newGrid = beforeRow ++ [beforeCol ++ Just currentPlayerSquare : afterCol] ++ afterRow
+            currentPlayerSquare :: Square
+            currentPlayerSquare = 
+              if isPlayer1Playing
+              then square player1
+              else square player2
+updateModel (NewGame) m
+  = pure $ Model emptyGrid (player1 m) (player2 m) True Nothing
+
 
 bootstrapUrl :: MisoString
 bootstrapUrl = "https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"
@@ -81,7 +116,7 @@ viewModel :: Model -> View Action
 viewModel m
   = div_ [ class_ "container"]
          [ headerView
-         -- , newGameView m
+         , newGameView m
          , contentView m
          -- , statsView m
          , link_ [ rel_ "stylesheet"
@@ -96,41 +131,45 @@ headerView
                        [ text "in miso!"] ] ]
 
 newGameView :: Model -> View Action
-newGameView _
+newGameView m
   = nav_ [ class_ "navbar navbar-light bg-light"]
          [ form_ [ class_ "form-inline" ]
                  [ input_  [ class_       "form-control mr-sm-2"
                            , type_        "text" 
-                           -- , value_    player1Name 
-                           -- , onChange  undefined
-                           , placeholder_ "Player 1" ]
-                 -- , select_ [ class_       "custom-select"
-                 --           , style_ [("margin-right", "15px")] ]
-                 --           (flip map ["A", "B"] $ \option ->
-                 --              option_ [ ] [ text option])
+                           , value_       (toMisoString $ name $ player1 m)
+                           , onChange  undefined
+                           , placeholder_ "Plyer 1" ]
+                 , select_ [ class_       "custom-select"
+                           , style_ [("margin-right", "15px")] ]
+                           (flip map ["O", "X"] $ \option ->
+                              option_ [ ] [ text option])
                  , input_  [ class_       "form-control mr-sm-2"
                            , type_        "text" 
-                           -- , value_    player2Name 
-                           -- , onChange  undefined
-                           , placeholder_ "Player 2" ]
-                 -- , select_ [ class_       "custom-select"
-                 --           , style_ [("margin-right", "15px")] ]
-                 --           (flip map ["A", "B"] $ \option ->
-                 --              option_ [ ] [ text option])
+                           , value_       (toMisoString $ name $ player2 m)
+                           , onChange  undefined
+                           , placeholder_ "Plyer 2" ]
+                 , select_ [ class_       "custom-select"
+                           , style_ [("margin-right", "15px")] ]
+                           (flip map ["O", "X"] $ \option ->
+                              option_ [ ] [ text option])
                  , button_ [ class_       "btn btn-outline-warning"
                            , type_        "button"
-                           -- , onClick   undefined
+                           , onClick      NewGame 
                            , disabled_    False ]
                            [ text "New game" ] ] ]
 
 contentView :: Model -> View Action
 contentView Model { .. }
   = div_ [ style_ [("margin", "20px")]]
-         [ gridView grid
-         , alertView "who is the winner?" ]
+         [ gridView grid 
+         , case winner of
+                Nothing -> text ""
+                (Just s) ->  alertView (toMisoString ("Winner is " ++ show s))
+         ]
+        
 
-gridView :: Grid -> View Action
-gridView grid
+gridView :: Model -> View Action
+gridView (Model grid p1 p2 isP1Playing winner)
   = div_ [ style_ [("margin", "20px")]]
          [ div_ [ class_ "row justify-content-around align-items-center" ]
                 [ h3_ [ class_ "text-primary" ] [ text "Player 1"]
