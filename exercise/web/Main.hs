@@ -11,13 +11,14 @@ import Data.Map ()
 import Data.Maybe (isJust)
 
 import Miso
-import Miso.String (MisoString)
+import Miso.String (MisoString, toMisoString)
+import GHC.RTS.Flags (DebugFlags(squeeze))
 
 main :: IO ()
 main = startApp App { .. }
   where
     initialAction = None
-    model         = Model { grid = emptyGrid }
+    model         = Model { grid = aGrid }
     update        = updateModel
     view          = viewModel
     events        = defaultEvents
@@ -64,8 +65,14 @@ data Action
 updateModel :: Action -> Model -> Effect Action Model
 updateModel None m
   = noEff m
-updateModel (ClickSquare rowId colId) m
-  = noEff m
+-- TODO: care about player
+updateModel (ClickSquare rowId colId) m@(Model grid)
+  = case grid !! rowId !! colId of
+        (Just _) -> noEff m -- Occupied
+        Nothing -> pure $ Model (beforeRow ++ [beforeCol ++ Just X : afterCol] ++ afterRow)
+          where
+            (beforeRow, row:afterRow) = splitAt rowId grid
+            (beforeCol, _:afterCol) = splitAt colId row
 
 bootstrapUrl :: MisoString
 bootstrapUrl = "https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"
@@ -126,7 +133,7 @@ gridView :: Grid -> View Action
 gridView grid
   = div_ [ style_ [("margin", "20px")]]
          [ div_ [ class_ "row justify-content-around align-items-center" ]
-                [ h3_ [ ] [ text "Player 1"]
+                [ h3_ [ class_ "text-primary" ] [ text "Player 1"]
                 , div_ [ style_ [("display", "inline-block")] ]
                        [ div_ [ style_ [ ("display", "grid")
                                        , ("grid-template-rows", "1fr 1fr 1fr")
@@ -145,7 +152,10 @@ gridView grid
                                  , ("font-size", "xxx-large") ]
                        , class_  "btn btn-outline-secondary"
                        , onClick (ClickSquare rowId colId) ]
-                       [ text "·" ] ]
+                       [ text (showSquare square)]]
+    showSquare :: Maybe Square -> MisoString
+    showSquare (Just square) = (toMisoString . show) square
+    showSquare _  = "."
 
 alertView :: MisoString -> View Action
 alertView v
