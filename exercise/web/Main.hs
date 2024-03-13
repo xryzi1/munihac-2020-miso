@@ -94,7 +94,7 @@ updateModel None m
 updateModel (ClickSquare rowId colId) m@(Model grid player1 player2 isPlayer1Playing winner)
   = case winner of
          Just _ -> noEff m
-         Nothing -> 
+         Nothing ->
           case grid !! rowId !! colId of
               (Just _) -> noEff m -- Occupied
               Nothing -> pure $
@@ -108,7 +108,7 @@ updateModel (ClickSquare rowId colId) m@(Model grid player1 player2 isPlayer1Pla
                     if isPlayer1Playing
                     then square player1
                     else square player2
-         
+
 updateModel (NewGame) m
   = pure $ Model emptyGrid (player1 m) (player2 m) True Nothing
 
@@ -159,9 +159,14 @@ newGameView m
                  , button_ [ class_       "btn btn-outline-warning"
                            , type_        "button"
                            , onClick      NewGame
-                           , disabled_    ((== Nothing) (winner m)) ]
+                           , disabled_    (gameNotEnded m) ]
                            [ text "New game" ] ] ]
 
+gameNotEnded :: Model -> Bool
+gameNotEnded m
+ | (== Nothing) (winner m) && freeMove (grid m) = True
+ | otherwise = False
+  where freeMove grid = Nothing `elem` concat grid
 
 contentView :: Model -> View Action
 contentView m@Model { .. }
