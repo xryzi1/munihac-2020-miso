@@ -176,7 +176,7 @@ gridView :: Model -> View Action
 gridView (Model grid p1 p2 isP1Playing winner)
   = div_ [ style_ [("margin", "20px")]]
          [ div_ [ class_ "row justify-content-around align-items-center" ]
-                [ h3_ [ class_ "text-primary" ] [ text (toMisoString (name p1))]
+                [ h3_ [ class_ (if isP1Playing then "text-primary" else "") ] [ text (toMisoString (name p1))]
                 , div_ [ style_ [("display", "inline-block")] ]
                        [ div_ [ style_ [ ("display", "grid")
                                        , ("grid-template-rows", "1fr 1fr 1fr")
@@ -184,7 +184,7 @@ gridView (Model grid p1 p2 isP1Playing winner)
                                        , ("grid-gap", "2px") ] ]
                                ( flip concatMap (zip [0 ..] grid) $ \(rowId, row) ->
                                    flip map (zip [0 ..] row) $ uncurry (cell rowId) )]
-                , h3_ [ ] [ text (toMisoString (name p2))] ] ]
+                , h3_ [ class_ (if isP1Playing then "" else "text-primary")] [ text (toMisoString (name p2))] ] ]
   where
     cell :: Int -> Int -> Maybe Square -> View Action
     cell rowId colId square
