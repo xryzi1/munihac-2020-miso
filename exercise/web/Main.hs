@@ -72,6 +72,12 @@ hasWinner g
       | otherwise
       = Nothing
 
+gameNotEnded :: Model -> Bool
+gameNotEnded m
+ | (== Nothing) (winner m) && freeMove (grid m) = True
+ | otherwise = False
+  where freeMove grid = Nothing `elem` concat grid
+
 data Model
   = Model {
     grid :: Grid
@@ -162,19 +168,15 @@ newGameView m
                            , disabled_    (gameNotEnded m) ]
                            [ text "New game" ] ] ]
 
-gameNotEnded :: Model -> Bool
-gameNotEnded m
- | (== Nothing) (winner m) && freeMove (grid m) = True
- | otherwise = False
-  where freeMove grid = Nothing `elem` concat grid
-
 contentView :: Model -> View Action
 contentView m@Model { .. }
   = div_ [ style_ [("margin", "20px")]]
          [ gridView m
-         , case winner of
-                Nothing -> text ""
+         , if not (gameNotEnded m)
+           then case winner of
+                Nothing -> alertView "It is a tie"
                 (Just s) ->  alertView (toMisoString ("Winner is " ++ show s))
+           else text ""
          ]
 
 
