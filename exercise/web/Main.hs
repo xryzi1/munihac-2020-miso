@@ -11,9 +11,13 @@ import Data.Map ()
 import Data.Maybe (isJust)
 
 import Miso
-import Miso.String (MisoString, toMisoString)
+import Miso.String (MisoString, toMisoString, unpack, fromMisoString)
 import GHC.RTS.Flags (DebugFlags(squeeze))
-
+{-
+TODO: 
+  - view selectBoxes coinlike (one X other O)
+  - names without ""
+-}
 main :: IO ()
 main = startApp App { .. }
   where
@@ -43,6 +47,7 @@ initModel = Model {
     , player2 = jacob
     , isPlayer1Playing = True
     , winner = Nothing
+    , newGame = NewGameState "Player 1" False "Player 2"
     }
 
 data Square
@@ -85,26 +90,46 @@ data Model
   , player2 :: Player
   , isPlayer1Playing :: Bool
   , winner :: Maybe Square
+  , newGame :: NewGameState
   }
   deriving (Show, Eq)
+
+data NewGameState = NewGameState {
+    name1 :: String
+  , isPlayer1X :: Bool
+  , name2 :: String
+} deriving (Show, Eq)
+
 
 data Action
   = None
   | ClickSquare Int Int
   | NewGame
+  | ChangeNewPlayer1Name String
+  | ChangeNewPlayer2Name String
+  | ChangeNewPlayerSquare Bool
   deriving (Show, Eq)
 
 updateModel :: Action -> Model -> Effect Action Model
 updateModel None m
   = noEff m
-updateModel (ClickSquare rowId colId) m@(Model grid player1 player2 isPlayer1Playing winner)
+-- newGameFormValues
+updateModel (ChangeNewPlayer1Name newPlayerName) m
+  = noEff $ m { newGame = (newGame m) { name1 = show newPlayerName }}
+updateModel (ChangeNewPlayer2Name newPlayerName) m
+  = noEff $ m { newGame = (newGame m) { name2 = show newPlayerName }}
+updateModel (ChangeNewPlayerSquare isP1X) m
+  = noEff $ m { newGame = (newGame m) { isPlayer1X = True}}
+--
+
+updateModel (ClickSquare rowId colId) m@(Model grid player1 player2 isPlayer1Playing winner n)
   = case winner of
          Just _ -> noEff m
          Nothing ->
           case grid !! rowId !! colId of
               (Just _) -> noEff m -- Occupied
               Nothing -> pure $
-                Model newGrid player1 player2 (not isPlayer1Playing) (hasWinner newGrid)
+                Model newGrid player1 player2 (not isPlayer1Playing) (hasWinner newGrid) n
                 where
                   (beforeRow, row:afterRow) = splitAt rowId grid
                   (beforeCol, _:afterCol) = splitAt colId row
@@ -115,9 +140,21 @@ updateModel (ClickSquare rowId colId) m@(Model grid player1 player2 isPlayer1Pla
                     then square player1
                     else square player2
 
-updateModel (NewGame) m
-  = pure $ Model emptyGrid (player1 m) (player2 m) True Nothing
-
+updateModel NewGame Model { .. }
+  = pure $
+      Model
+        emptyGrid
+        (Player {square = p1Square, name = name1 newGame})
+        (Player {square = p2Square, name = name2 newGame})
+        True
+        Nothing
+        (NewGameState { name1 = "", isPlayer1X = False, name2 = "" })
+  where p1Square = if isPlayer1X newGame
+                   then X
+                   else O
+        p2Square = if isPlayer1X newGame
+                   then O
+                   else X
 
 bootstrapUrl :: MisoString
 bootstrapUrl = "https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"
@@ -146,27 +183,50 @@ newGameView m
          [ form_ [ class_ "form-inline" ]
                  [ input_  [ class_       "form-control mr-sm-2"
                            , type_        "text"
-                           , value_       (toMisoString $ name $ player1 m)
-                           , onChange  undefined
-                           , placeholder_ "Plyer 1" ]
-                 , select_ [ class_       "custom-select"
-                           , style_ [("margin-right", "15px")] ]
-                           (flip map ["O", "X"] $ \option ->
-                              option_ [ ] [ text option])
+                           , value_       (toMisoString $ name1 $ newGame m)
+                           , onChange     (ChangeNewPlayer1Name . fromMisoString)
+                           , placeholder_ (toMisoString $ name $ player1 m) ]
+                 , firstSelectBox
+
                  , input_  [ class_       "form-control mr-sm-2"
                            , type_        "text"
-                           , value_       (toMisoString $ name $ player2 m)
-                           , onChange  undefined
-                           , placeholder_ "Plyer 2" ]
-                 , select_ [ class_       "custom-select"
-                           , style_ [("margin-right", "15px")] ]
-                           (flip map ["O", "X"] $ \option ->
-                              option_ [ ] [ text option])
+                           , value_       (toMisoString $ name2 $ newGame m)
+                           , onChange     (ChangeNewPlayer2Name .  fromMisoString)
+                           , placeholder_ (toMisoString $ name $ player2 m) ]
+                 , secondSelectBox
                  , button_ [ class_       "btn btn-outline-warning"
                            , type_        "button"
                            , onClick      NewGame
                            , disabled_    (gameNotEnded m) ]
                            [ text "New game" ] ] ]
+
+firstSelectBox :: View Action
+firstSelectBox = select_
+    [ class_ "custom-select"
+    , style_ [("margin-right", "15px")]
+    , onInput (\evt -> case targetValue evt of
+                        "X" -> ChangeNewPlayerSquare True
+                        "O" -> ChangeNewPlayerSquare False)
+    ]
+    [ option_ [value_ (toMisoString ("X" :: String))] [text "X"]
+    , option_ [value_ (toMisoString ("O" :: String))] [text "O"]
+    ]
+
+secondSelectBox :: View Action
+secondSelectBox = select_
+    [ class_ "custom-select"
+    , onInput (\evt -> case targetValue evt of
+                        "X" -> ChangeNewPlayerSquare False
+                        "O" -> ChangeNewPlayerSquare True)
+    ]
+    [ option_ [value_ (toMisoString ("X" :: String))] [text "X"]
+    , option_ [value_ (toMisoString ("O" :: String))] [text "O"]
+    ]
+
+
+targetValue :: MisoString -> String
+targetValue = unpack . fromMisoString
+
 
 contentView :: Model -> View Action
 contentView m@Model { .. }
@@ -181,7 +241,7 @@ contentView m@Model { .. }
 
 
 gridView :: Model -> View Action
-gridView (Model grid p1 p2 isP1Playing winner)
+gridView (Model grid p1 p2 isP1Playing winner _)
   = div_ [ style_ [("margin", "20px")]]
          [ div_ [ class_ "row justify-content-around align-items-center" ]
                 [ h3_ [ class_ (if isP1Playing then "text-primary" else "") ] [ text (toMisoString (name p1))]
