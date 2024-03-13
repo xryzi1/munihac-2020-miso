@@ -159,8 +159,9 @@ newGameView m
                  , button_ [ class_       "btn btn-outline-warning"
                            , type_        "button"
                            , onClick      NewGame
-                           , disabled_    False ]
+                           , disabled_    ((== Nothing) (winner m)) ]
                            [ text "New game" ] ] ]
+
 
 contentView :: Model -> View Action
 contentView m@Model { .. }
