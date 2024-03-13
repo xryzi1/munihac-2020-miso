@@ -26,9 +26,9 @@ main = startApp App { .. }
     mountPoint    = Nothing
     logLevel      = Off
 
-data Player = Player { 
+data Player = Player {
     square :: Square
-  , name   :: String  
+  , name   :: String
   }
   deriving (Show, Eq)
 
@@ -53,7 +53,7 @@ type Grid = [[Maybe Square]]
 
 emptyGrid, aGrid :: Grid
 emptyGrid = replicate 3 (replicate 3 Nothing)
-aGrid = [ [ Just X,  Nothing, Nothing ]
+aGrid = [ [ Just X,  Nothing, Nothing ]
         , [ Nothing, Just O,  Nothing ]
         , replicate 3 Nothing ]
 
@@ -62,7 +62,7 @@ hasWinner g
   = asum (map isWinnerRow thingToCheck)
   where
     thingToCheck
-      = g ++ transpose g 
+      = g ++ transpose g
           ++ [ [g !! 0 !! 0, g !! 1 !! 1, g !! 2 !! 2]
              , [g !! 0 !! 2, g !! 1 !! 1, g !! 2 !! 0] ]
     isWinnerRow :: [Maybe Square] -> Maybe Square
@@ -73,7 +73,7 @@ hasWinner g
       = Nothing
 
 data Model
-  = Model { 
+  = Model {
     grid :: Grid
   , player1 :: Player
   , player2 :: Player
@@ -94,14 +94,14 @@ updateModel None m
 updateModel (ClickSquare rowId colId) m@(Model grid player1 player2 isPlayer1Playing winner)
   = case grid !! rowId !! colId of
         (Just _) -> noEff m -- Occupied
-        Nothing -> pure $ 
+        Nothing -> pure $
           Model newGrid player1 player2 (not isPlayer1Playing) (hasWinner newGrid)
           where
             (beforeRow, row:afterRow) = splitAt rowId grid
             (beforeCol, _:afterCol) = splitAt colId row
             newGrid = beforeRow ++ [beforeCol ++ Just currentPlayerSquare : afterCol] ++ afterRow
             currentPlayerSquare :: Square
-            currentPlayerSquare = 
+            currentPlayerSquare =
               if isPlayer1Playing
               then square player1
               else square player2
@@ -135,7 +135,7 @@ newGameView m
   = nav_ [ class_ "navbar navbar-light bg-light"]
          [ form_ [ class_ "form-inline" ]
                  [ input_  [ class_       "form-control mr-sm-2"
-                           , type_        "text" 
+                           , type_        "text"
                            , value_       (toMisoString $ name $ player1 m)
                            , onChange  undefined
                            , placeholder_ "Plyer 1" ]
@@ -144,7 +144,7 @@ newGameView m
                            (flip map ["O", "X"] $ \option ->
                               option_ [ ] [ text option])
                  , input_  [ class_       "form-control mr-sm-2"
-                           , type_        "text" 
+                           , type_        "text"
                            , value_       (toMisoString $ name $ player2 m)
                            , onChange  undefined
                            , placeholder_ "Plyer 2" ]
@@ -154,34 +154,33 @@ newGameView m
                               option_ [ ] [ text option])
                  , button_ [ class_       "btn btn-outline-warning"
                            , type_        "button"
-                           , onClick      NewGame 
+                           , onClick      NewGame
                            , disabled_    False ]
                            [ text "New game" ] ] ]
 
 contentView :: Model -> View Action
-contentView Model { .. }
+contentView m@Model { .. }
   = div_ [ style_ [("margin", "20px")]]
-         [ gridView grid 
+         [ gridView m
          , case winner of
                 Nothing -> text ""
                 (Just s) ->  alertView (toMisoString ("Winner is " ++ show s))
          ]
-        
+
 
 gridView :: Model -> View Action
 gridView (Model grid p1 p2 isP1Playing winner)
   = div_ [ style_ [("margin", "20px")]]
          [ div_ [ class_ "row justify-content-around align-items-center" ]
-                [ h3_ [ class_ "text-primary" ] [ text "Player 1"]
+                [ h3_ [ class_ "text-primary" ] [ text (toMisoString (name p1))]
                 , div_ [ style_ [("display", "inline-block")] ]
                        [ div_ [ style_ [ ("display", "grid")
                                        , ("grid-template-rows", "1fr 1fr 1fr")
                                        , ("grid-template-columns", "1fr 1fr 1fr")
                                        , ("grid-gap", "2px") ] ]
                                ( flip concatMap (zip [0 ..] grid) $ \(rowId, row) ->
-                                   flip map (zip [0 ..] row) $ \(colId, sq) ->
-                                     cell rowId colId sq )]
-                , h3_ [ ] [ text "Player 2"] ] ]
+                                   flip map (zip [0 ..] row) $ uncurry (cell rowId) )]
+                , h3_ [ ] [ text (toMisoString (name p2))] ] ]
   where
     cell :: Int -> Int -> Maybe Square -> View Action
     cell rowId colId square
