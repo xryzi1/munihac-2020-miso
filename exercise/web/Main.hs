@@ -92,19 +92,23 @@ updateModel :: Action -> Model -> Effect Action Model
 updateModel None m
   = noEff m
 updateModel (ClickSquare rowId colId) m@(Model grid player1 player2 isPlayer1Playing winner)
-  = case grid !! rowId !! colId of
-        (Just _) -> noEff m -- Occupied
-        Nothing -> pure $
-          Model newGrid player1 player2 (not isPlayer1Playing) (hasWinner newGrid)
-          where
-            (beforeRow, row:afterRow) = splitAt rowId grid
-            (beforeCol, _:afterCol) = splitAt colId row
-            newGrid = beforeRow ++ [beforeCol ++ Just currentPlayerSquare : afterCol] ++ afterRow
-            currentPlayerSquare :: Square
-            currentPlayerSquare =
-              if isPlayer1Playing
-              then square player1
-              else square player2
+  = case winner of
+         Just _ -> noEff m
+         Nothing -> 
+          case grid !! rowId !! colId of
+              (Just _) -> noEff m -- Occupied
+              Nothing -> pure $
+                Model newGrid player1 player2 (not isPlayer1Playing) (hasWinner newGrid)
+                where
+                  (beforeRow, row:afterRow) = splitAt rowId grid
+                  (beforeCol, _:afterCol) = splitAt colId row
+                  newGrid = beforeRow ++ [beforeCol ++ Just currentPlayerSquare : afterCol] ++ afterRow
+                  currentPlayerSquare :: Square
+                  currentPlayerSquare =
+                    if isPlayer1Playing
+                    then square player1
+                    else square player2
+         
 updateModel (NewGame) m
   = pure $ Model emptyGrid (player1 m) (player2 m) True Nothing
 
