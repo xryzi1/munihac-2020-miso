@@ -2,6 +2,9 @@
 {-# language OverloadedStrings #-}
 {-# language RecordWildCards   #-}
 {-# language OverloadedLists   #-}
+{-# language DeriveGeneric     #-}
+{-# language DeriveAnyClass    #-}
+
 
 module Main where
 
@@ -11,12 +14,17 @@ import Data.Map ()
 import Data.Maybe (isJust)
 
 import Miso
-import Miso.String (MisoString, toMisoString, unpack, fromMisoString)
+import Miso.String (MisoString, toMisoString, unpack, fromMisoString, null)
 import GHC.RTS.Flags (DebugFlags(squeeze))
+import Miso.Effect.Storage
+import Data.Aeson
+import GHC.Generics
 {-
-TODO: 
+TODO: initStats
   - view selectBoxes coinlike (one X other O)
   - names without ""
+  - , disabled_    (Miso.String.null (toMisoString $ name2 (newGame m)))
+  - stats browser local storage (developer Mozilla localStorage)
 -}
 main :: IO ()
 main = startApp App { .. }
@@ -48,7 +56,10 @@ initModel = Model {
     , isPlayer1Playing = True
     , winner = Nothing
     , newGame = NewGameState "Player 1" False "Player 2"
+    , stats = Stats []
     }
+
+data Stats = Stats [MisoString] deriving (Show, Eq, Generic, FromJSON, ToJSON)
 
 data Square
   = X | O
@@ -91,6 +102,7 @@ data Model
   , isPlayer1Playing :: Bool
   , winner :: Maybe Square
   , newGame :: NewGameState
+  , stats :: Stats
   }
   deriving (Show, Eq)
 
@@ -108,6 +120,8 @@ data Action
   | ChangeNewPlayer1Name String
   | ChangeNewPlayer2Name String
   | ChangeNewPlayerSquare Bool
+  | LoadData
+  | SetStats Stats
   deriving (Show, Eq)
 
 updateModel :: Action -> Model -> Effect Action Model
@@ -121,15 +135,25 @@ updateModel (ChangeNewPlayer2Name newPlayerName) m
 updateModel (ChangeNewPlayerSquare isP1X) m
   = noEff $ m { newGame = (newGame m) { isPlayer1X = True}}
 --
-
-updateModel (ClickSquare rowId colId) m@(Model grid player1 player2 isPlayer1Playing winner n)
+-- Load local storage
+updateModel LoadData m =
+  m <# do
+    store <- getLocalStorage "stats"
+    let stats = case store of
+                    Left _  -> fakeStats
+                    Right i -> i
+    pure $ SetStats stats
+updateModel (SetStats initStats) m
+  = noEff $ m {stats = initStats}
+--
+updateModel (ClickSquare rowId colId) m@(Model grid player1 player2 isPlayer1Playing winner n s)
   = case winner of
          Just _ -> noEff m
          Nothing ->
           case grid !! rowId !! colId of
               (Just _) -> noEff m -- Occupied
               Nothing -> pure $
-                Model newGrid player1 player2 (not isPlayer1Playing) (hasWinner newGrid) n
+                Model newGrid player1 player2 (not isPlayer1Playing) (hasWinner newGrid) n s
                 where
                   (beforeRow, row:afterRow) = splitAt rowId grid
                   (beforeCol, _:afterCol) = splitAt colId row
@@ -149,6 +173,7 @@ updateModel NewGame Model { .. }
         True
         Nothing
         (NewGameState { name1 = "", isPlayer1X = False, name2 = "" })
+        stats
   where p1Square = if isPlayer1X newGame
                    then X
                    else O
@@ -165,7 +190,7 @@ viewModel m
          [ headerView
          , newGameView m
          , contentView m
-         -- , statsView m
+         , statsView m
          , link_ [ rel_ "stylesheet"
                  , href_ bootstrapUrl ] ]
 
@@ -241,7 +266,7 @@ contentView m@Model { .. }
 
 
 gridView :: Model -> View Action
-gridView (Model grid p1 p2 isP1Playing winner _)
+gridView (Model grid p1 p2 isP1Playing winner _ _)
   = div_ [ style_ [("margin", "20px")]]
          [ div_ [ class_ "row justify-content-around align-items-center" ]
                 [ h3_ [ class_ (if isP1Playing then "text-primary" else "") ] [ text (toMisoString (name p1))]
@@ -274,9 +299,9 @@ alertView v
          [ h4_ [ class_ "alert-heading" ]
                [ text v ] ]
 
-fakeStats :: [MisoString]
+fakeStats :: Stats
 fakeStats
-  = [ "A - B, won by A in 3 moves"
+  = Stats [ "A - B, won by A in 3 moves"
     , "Quijote - Sancho, won by Sancho in 5 moves" ]
 
 statsView :: Model -> View Action
@@ -284,5 +309,5 @@ statsView _
   = div_ [ class_ "row justify-content-around align-items-center"
          , style_ [("margin-bottom", "20px")] ]
          [ ul_ [ class_ "list-group"]
-               ( flip map fakeStats $ \elt ->
+               ( flip map ((\(Stats xs) -> xs) fakeStats) $ \elt ->
                    ul_ [ class_ "list-group-item" ] [ text elt ] ) ]
